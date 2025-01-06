@@ -1,8 +1,11 @@
 import re
+import hashlib
+import json
+from pathlib import Path
 from pprint import pprint
 
 # Path to the log file
-log_file_path = "1234.log"  # Update this with the correct path to your file
+log_file_path = "/Users/denisguzun/Downloads/1234.log" # Update this to your log file path
 
 # Define regex patterns for parsing
 duration_pattern = re.compile(r"LOG:\s+duration:\s+([\d\.]+)\s+ms")
@@ -17,6 +20,17 @@ plans = []
 current_plan = None
 expecting_plan_lines = False  # Flag to determine if we are reading plan lines
 
+# Output JSON file name (similar to the input file)
+output_file_path = Path(log_file_path).with_suffix(".json")
+
+
+def normalize_sql(sql_text):
+    """
+    Normalize the SQL text by removing extra whitespace and converting to lowercase.
+    """
+    return " ".join(sql_text.lower().split())
+
+
 with open(log_file_path, "r") as file:
     for line in file:
         try:
@@ -30,6 +44,7 @@ with open(log_file_path, "r") as file:
                 current_plan = {
                     "duration_ms": float(duration_match.group(1)),
                     "query": None,
+                    "query_hash": None,
                     "operations": []
                 }
                 continue
@@ -37,7 +52,11 @@ with open(log_file_path, "r") as file:
             # Match the Query Text
             query_match = query_pattern.search(line)
             if query_match and current_plan:
-                current_plan["query"] = query_match.group(1)
+                sql_text = query_match.group(1)
+                current_plan["query"] = sql_text
+                # Normalize and calculate the hash of the query text
+                normalized_sql = normalize_sql(sql_text)
+                current_plan["query_hash"] = hashlib.sha256(normalized_sql.encode()).hexdigest()
                 expecting_plan_lines = True  # Start expecting plan lines
                 continue
 
@@ -87,5 +106,9 @@ with open(log_file_path, "r") as file:
 if current_plan:
     plans.append(current_plan)
 
-# Display the parsed plans
-pprint(plans)
+# Save the parsed plans to a JSON file
+with open(output_file_path, "w") as output_file:
+    json.dump(plans, output_file, indent=4)
+
+# Print the output file path for confirmation
+pprint(f"Results saved to: {output_file_path}")
